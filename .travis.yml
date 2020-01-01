@@ -9,12 +9,12 @@ jobs:
       script: make build
     - stage: lambda
       if: tag IS present
-      script: make build
+      script: make build && mkdir release && mv lambda.zip release/lambda.zip
 deploy:
   - provider: releases
     api_key:
       secure: GaAFW7lnaznRIiDmkkTQJrV2cnpqv9NRhAOMNOB78k7LJCrScVqHTJRdzu+vPjzMFmm7g+35Df4fsrjdSMh3zUyIbmTYFDJ82qBqS4U4PqxxT3QVA/Yv74DOOeV+0VnGmYC6iERcrrWbfn5O6ySzxLvs0pkQ0z43u3Wg1ncn1o8MPBa6sdIZvTFjZqIrjuDwhTCEplzlSNPtgn4oVk7MFpjaDxAYNMkSW2xd4ZPMQBpal8r6dK5Zho8myEesQli3cUj82ataaXgPTditXVMUWQTrppaJ99MWzK58GH7kuCrOvd3jpFEI87IHuEevc1FLHbGCIvqk20w2PAOw2O/THpfYjZcZEGDHCOLRpAnErlSECktoX8lG6WKrhF3zjppUZCHAKoZE7GjhKc12c4Uc04XpTGiPz97mH4M1W+mRt38c49pVLHt8rijzDyA1PL4BjNDWXzNInURvFwjYrublJsXl7M5mt41urzYah1E66heIRJROEhLZf5bo7rSc4/FOukMibAqhpLm5a2vbvtRtLOStswYbsqcejW3sHtPfT6MCyu0ZTE3834MVqgxAL5T7ull4MfgqCiisuc7VFIZAB3Xlek38bJ/KR/GlsUIWAMPFFuMTA12ROKNDSO7HUld1DdJfZX0Nw2bBjt4xV5n1VXXlyuzNAiPwKRPiV/jhhAY=
-    file: lambda.zip
+    file: release/lambda.zip
     skip_cleanup: true
     on:
       tags: true
