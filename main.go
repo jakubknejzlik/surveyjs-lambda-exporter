@@ -14,6 +14,7 @@ import (
 
 type ExportMeta struct {
 	AnswerIDs []string
+	RowNames  []string
 }
 
 func receiver(e cloudevents.Event) error {

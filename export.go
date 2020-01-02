@@ -64,7 +64,7 @@ func handleExport(ctx context.Context, client *graphqlorm.ORMClient, meta Export
 		return
 	}
 
-	csv, err := buildCSV(ctx, query.Result)
+	csv, err := buildCSV(ctx, query.Result, meta)
 	if err != nil {
 		return
 	}
@@ -76,12 +76,16 @@ func handleExport(ctx context.Context, client *graphqlorm.ORMClient, meta Export
 	return
 }
 
-func buildCSV(ctx context.Context, se SurveyExport) (csvContent []byte, err error) {
+func buildCSV(ctx context.Context, se SurveyExport, meta ExportMeta) (csvContent []byte, err error) {
 	for _, field := range se.Fields {
 		fmt.Println("field: ", field.Key, "=>", field.Title)
 	}
 
 	header := []string{}
+	hasRowNames := meta.RowNames != nil
+	if hasRowNames {
+		header = append(header, "")
+	}
 
 	for _, field := range se.Fields {
 		header = append(header, field.Title)
@@ -90,8 +94,9 @@ func buildCSV(ctx context.Context, se SurveyExport) (csvContent []byte, err erro
 	records := [][]string{
 		header,
 	}
-	for _, row := range se.Rows {
+	for i, row := range se.Rows {
 		values := map[string]string{}
+
 		for _, val := range row.Values {
 			if val.Text != "" {
 				values[val.Key] = val.Text
@@ -100,6 +105,15 @@ func buildCSV(ctx context.Context, se SurveyExport) (csvContent []byte, err erro
 			}
 		}
 		rowValues := []string{}
+
+		if hasRowNames {
+			if len(meta.RowNames) > i {
+				rowValues = append(rowValues, meta.RowNames[i])
+			} else {
+				rowValues = append(rowValues, "–")
+			}
+		}
+
 		for _, field := range se.Fields {
 			rowValues = append(rowValues, values[field.Key])
 		}
