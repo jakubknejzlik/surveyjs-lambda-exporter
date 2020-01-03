@@ -14,7 +14,8 @@ const (
 	QUERY_SURVEY_EXPORT = `
 	query ($answerIDs: [ID!]) {
 		result: surveyExport(
-		  filter: { answerIDs: $answerIDs }
+		  filter: { answerIDs: $answerIDs },
+		  limit: 500
 		) {
 		  fields {
 			key
