@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/graphql-services/go-saga/graphqlorm"
 )
@@ -16,21 +17,28 @@ const (
 		result: surveyExport(
 		  filter: { answerIDs: $answerIDs }
 		) {
-		  fields {
-			key
-			title
-		  }
-		  rows{
-			answer{
-			  id
-			  surveyId
+			items {
+				survey{
+					id
+					name
+				}
+				fields {
+					key
+					title
+				}
+				rows {
+					answer {
+						id
+						completed
+						updatedAt
+					}
+					values {
+						key
+						value
+						text
+					}
+				}
 			}
-			values {
-			  key
-			  value
-			  text
-			}
-		  }
 		}
 	  }
 	  `
@@ -50,12 +58,26 @@ type SurveyExportRowAnswer struct {
 	SurveyID string
 }
 type SurveyExportRow struct {
+	Answer struct {
+		ID        string
+		Completed bool
+		UpdatedAt time.Time
+	}
 	Values []SurveyExportRowValue
 }
-type SurveyExport struct {
+type SurveyExportItemSurvey struct {
+	ID   string
+	Name string
+}
+type SurveyExportItem struct {
+	Survey *SurveyExportItemSurvey
 	Fields []SurveyExportField
 	Rows   []SurveyExportRow
 }
+type SurveyExport struct {
+	Items []SurveyExportItem
+}
+
 type SurveyExportQuery struct {
 	Result SurveyExport
 }
@@ -82,24 +104,58 @@ func handleExport(ctx context.Context, client *graphqlorm.ORMClient, meta Export
 }
 
 func buildCSV(ctx context.Context, se SurveyExport, meta ExportMeta) (csvContent []byte, err error) {
-	for _, field := range se.Fields {
+	records := [][]string{}
+
+	var rowNamesMap *map[string]string
+	if meta.RowNames != nil {
+		rowNamesMap = &map[string]string{}
+		for i, answerID := range meta.AnswerIDs {
+			(*rowNamesMap)[answerID] = meta.RowNames[i]
+		}
+	}
+
+	for _, item := range se.Items {
+		_records, _err := buildCSVRow(ctx, item, rowNamesMap)
+		if _err != nil {
+			err = _err
+			return
+		}
+		records = append(records, _records...)
+		records = append(records, []string{})
+	}
+
+	buf := bytes.NewBufferString("")
+	w := csv.NewWriter(buf)
+	w.WriteAll(records) // calls Flush internally
+
+	if err := w.Error(); err != nil {
+		log.Fatalln("error writing csv:", err)
+	}
+
+	csvContent = buf.Bytes()
+	return
+}
+func buildCSVRow(ctx context.Context, item SurveyExportItem, rowNamesMap *map[string]string) (records [][]string, err error) {
+	for _, field := range item.Fields {
 		fmt.Println("field: ", field.Key, "=>", field.Title)
 	}
 
 	header := []string{}
-	hasRowNames := meta.RowNames != nil
+	hasRowNames := rowNamesMap != nil
 	if hasRowNames {
-		header = append(header, "")
+		header = append(header, item.Survey.Name)
 	}
 
-	for _, field := range se.Fields {
+	header = append(header, "completed", "last update")
+
+	for _, field := range item.Fields {
 		header = append(header, field.Key)
 	}
 
-	records := [][]string{
+	records = [][]string{
 		header,
 	}
-	for i, row := range se.Rows {
+	for _, row := range item.Rows {
 		values := map[string]string{}
 
 		for _, val := range row.Values {
@@ -112,28 +168,26 @@ func buildCSV(ctx context.Context, se SurveyExport, meta ExportMeta) (csvContent
 		rowValues := []string{}
 
 		if hasRowNames {
-			if len(meta.RowNames) > i {
-				rowValues = append(rowValues, meta.RowNames[i])
+			rowName, ok := (*rowNamesMap)[row.Answer.ID]
+			if ok {
+				rowValues = append(rowValues, rowName)
 			} else {
 				rowValues = append(rowValues, "–")
 			}
 		}
 
-		for _, field := range se.Fields {
+		if row.Answer.Completed {
+			rowValues = append(rowValues, "✓")
+		} else {
+			rowValues = append(rowValues, "✗")
+		}
+		rowValues = append(rowValues, row.Answer.UpdatedAt.Format("2006-01-02 15:04:05"))
+
+		for _, field := range item.Fields {
 			rowValues = append(rowValues, values[field.Key])
 		}
 		records = append(records, rowValues)
 	}
-
-	buf := bytes.NewBufferString("")
-	w := csv.NewWriter(buf)
-	w.WriteAll(records) // calls Flush internally
-
-	if err := w.Error(); err != nil {
-		log.Fatalln("error writing csv:", err)
-	}
-
-	csvContent = buf.Bytes()
 
 	return
 }
