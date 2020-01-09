@@ -89,7 +89,7 @@ func buildCSV(ctx context.Context, se SurveyExport, meta ExportMeta) (csvContent
 	}
 
 	for _, field := range se.Fields {
-		header = append(header, field.Title)
+		header = append(header, field.Key)
 	}
 
 	records := [][]string{
