@@ -14,8 +14,7 @@ const (
 	QUERY_SURVEY_EXPORT = `
 	query ($answerIDs: [ID!]) {
 		result: surveyExport(
-		  filter: { answerIDs: $answerIDs },
-		  limit: 500
+		  filter: { answerIDs: $answerIDs }
 		) {
 		  fields {
 			key
@@ -24,6 +23,7 @@ const (
 		  rows{
 			answer{
 			  id
+			  surveyId
 			}
 			values {
 			  key
@@ -44,6 +44,10 @@ type SurveyExportRowValue struct {
 	Key   string
 	Value string
 	Text  string
+}
+type SurveyExportRowAnswer struct {
+	ID       string
+	SurveyID string
 }
 type SurveyExportRow struct {
 	Values []SurveyExportRowValue
