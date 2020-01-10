@@ -159,11 +159,7 @@ func buildCSVRow(ctx context.Context, item SurveyExportItem, rowNamesMap *map[st
 		values := map[string]string{}
 
 		for _, val := range row.Values {
-			if val.Text != "" {
-				values[val.Key] = val.Text
-			} else {
-				values[val.Key] = val.Value
-			}
+			values[val.Key] = val.Value
 		}
 		rowValues := []string{}
 
