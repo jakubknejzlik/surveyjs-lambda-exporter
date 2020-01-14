@@ -35,7 +35,6 @@ const (
 					values {
 						key
 						value
-						text
 					}
 				}
 			}
@@ -51,7 +50,6 @@ type SurveyExportField struct {
 type SurveyExportRowValue struct {
 	Key   string
 	Value string
-	Text  string
 }
 type SurveyExportRowAnswer struct {
 	ID       string
