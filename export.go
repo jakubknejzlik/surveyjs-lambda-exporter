@@ -104,22 +104,51 @@ func handleExport(ctx context.Context, client *graphqlorm.ORMClient, meta Export
 func buildCSV(ctx context.Context, se SurveyExport, meta ExportMeta) (csvContent []byte, err error) {
 	records := [][]string{}
 
-	var rowNamesMap *map[string]string
-	if meta.RowNames != nil {
-		rowNamesMap = &map[string]string{}
-		for i, answerID := range meta.AnswerIDs {
-			(*rowNamesMap)[answerID] = meta.RowNames[i]
+	values := map[string](map[string]string){}
+	participantAnswerMap := map[string]string{}
+	fields := []string{"participant"}
+	fieldsMap := map[string]bool{}
+
+	for i, answerID := range meta.AnswerIDs {
+		participantID := meta.RowNames[i]
+		values[participantID] = map[string]string{
+			"participant": participantID,
 		}
+		participantAnswerMap[answerID] = participantID
 	}
 
 	for _, item := range se.Items {
-		_records, _err := buildCSVRow(ctx, item, rowNamesMap)
-		if _err != nil {
-			err = _err
-			return
+		for _, row := range item.Rows {
+			for _, val := range row.Values {
+				for i := 0; i < 100; i++ {
+					valueKey := val.Key
+					if i > 0 {
+						valueKey = fmt.Sprintf("%s_%d", valueKey, i)
+					}
+					participantID := participantAnswerMap[row.Answer.ID]
+					_, exists := values[participantID][valueKey]
+					if !exists {
+						values[participantID][valueKey] = val.Value
+						if _, exists := fieldsMap[valueKey]; !exists {
+							fields = append(fields, valueKey)
+							fieldsMap[valueKey] = true
+						}
+						break
+					} else {
+						continue
+					}
+				}
+			}
 		}
-		records = append(records, _records...)
-		records = append(records, []string{})
+	}
+
+	records = append(records, fields)
+	for _, value := range values {
+		row := []string{}
+		for _, field := range fields {
+			row = append(row, value[field])
+		}
+		records = append(records, row)
 	}
 
 	buf := bytes.NewBufferString("")
@@ -131,57 +160,5 @@ func buildCSV(ctx context.Context, se SurveyExport, meta ExportMeta) (csvContent
 	}
 
 	csvContent = buf.Bytes()
-	return
-}
-func buildCSVRow(ctx context.Context, item SurveyExportItem, rowNamesMap *map[string]string) (records [][]string, err error) {
-	for _, field := range item.Fields {
-		fmt.Println("field: ", field.Key, "=>", field.Title)
-	}
-
-	header := []string{}
-	hasRowNames := rowNamesMap != nil
-	if hasRowNames {
-		header = append(header, item.Survey.Name)
-	}
-
-	header = append(header, "completed", "last update")
-
-	for _, field := range item.Fields {
-		header = append(header, field.Key)
-	}
-
-	records = [][]string{
-		header,
-	}
-	for _, row := range item.Rows {
-		values := map[string]string{}
-
-		for _, val := range row.Values {
-			values[val.Key] = val.Value
-		}
-		rowValues := []string{}
-
-		if hasRowNames {
-			rowName, ok := (*rowNamesMap)[row.Answer.ID]
-			if ok {
-				rowValues = append(rowValues, rowName)
-			} else {
-				rowValues = append(rowValues, "–")
-			}
-		}
-
-		if row.Answer.Completed {
-			rowValues = append(rowValues, "✓")
-		} else {
-			rowValues = append(rowValues, "✗")
-		}
-		rowValues = append(rowValues, row.Answer.UpdatedAt.Format("2006-01-02 15:04:05"))
-
-		for _, field := range item.Fields {
-			rowValues = append(rowValues, values[field.Key])
-		}
-		records = append(records, rowValues)
-	}
-
 	return
 }
