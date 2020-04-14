@@ -81,15 +81,33 @@ type SurveyExportQuery struct {
 }
 
 func handleExport(ctx context.Context, client *graphqlorm.ORMClient, meta ExportMeta) (fileID string, err error) {
-	var query SurveyExportQuery
-	err = client.SendQuery(ctx, QUERY_SURVEY_EXPORT, map[string]interface{}{
-		"answerIDs": meta.AnswerIDs,
-	}, &query)
-	if err != nil {
-		return
+	surveyItems := []SurveyExportItem{}
+
+	chunks := [][]string{}
+	chunkSize := 100
+
+	for i := 0; i < len(meta.AnswerIDs); i += chunkSize {
+		end := i + chunkSize
+
+		if end > len(meta.AnswerIDs) {
+			end = len(meta.AnswerIDs)
+		}
+
+		chunks = append(chunks, meta.AnswerIDs[i:end])
 	}
 
-	csv, err := buildCSV(ctx, query.Result, meta)
+	for _, chunk := range chunks {
+		var query SurveyExportQuery
+		err = client.SendQuery(ctx, QUERY_SURVEY_EXPORT, map[string]interface{}{
+			"answerIDs": chunk,
+		}, &query)
+		if err != nil {
+			return
+		}
+		surveyItems = append(surveyItems, query.Result.Items...)
+	}
+
+	csv, err := buildCSV(ctx, surveyItems, meta)
 	if err != nil {
 		return
 	}
@@ -101,7 +119,7 @@ func handleExport(ctx context.Context, client *graphqlorm.ORMClient, meta Export
 	return
 }
 
-func buildCSV(ctx context.Context, se SurveyExport, meta ExportMeta) (csvContent []byte, err error) {
+func buildCSV(ctx context.Context, items []SurveyExportItem, meta ExportMeta) (csvContent []byte, err error) {
 	records := [][]string{}
 
 	values := map[string](map[string]string){}
@@ -117,7 +135,7 @@ func buildCSV(ctx context.Context, se SurveyExport, meta ExportMeta) (csvContent
 		participantAnswerMap[answerID] = participantID
 	}
 
-	for _, item := range se.Items {
+	for _, item := range items {
 		for _, row := range item.Rows {
 			for _, val := range row.Values {
 				for i := 0; i < 100; i++ {
