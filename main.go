@@ -13,8 +13,9 @@ import (
 )
 
 type ExportMeta struct {
-	AnswerIDs []string
-	RowNames  []string
+	AnswerIDs      []string
+	RowNames       []string
+	PublicSurveyId *string
 }
 
 func receiver(e cloudevents.Event) error {
@@ -34,7 +35,7 @@ func receiver(e cloudevents.Event) error {
 	}
 	ormClient := graphqlorm.NewClient(ormURL)
 
-	err = updateExportState(ctx, ormClient, ormEvent, "PROCESSING", nil)
+	err = updateExportState(ctx, ormClient, ormEvent, "PROCESSING", 0, nil)
 	if err != nil {
 		return err
 	}
@@ -51,10 +52,12 @@ func receiver(e cloudevents.Event) error {
 		return err
 	}
 
-	fileID, err := handleExport(ctx, ormClient, meta)
+	fileID, err := handleExport(ctx, ormClient, meta, func(progress float32) {
+		updateExportState(ctx, ormClient, ormEvent, "PROCESSING", progress, nil)
+	})
 	if err != nil {
 		fmt.Println("error processing", err)
-		err = updateExport(ctx, ormClient, ormEvent, map[string]string{
+		err = updateExport(ctx, ormClient, ormEvent, map[string]interface{}{
 			"state":            "ERROR",
 			"errorDescription": err.Error(),
 		})
@@ -64,12 +67,13 @@ func receiver(e cloudevents.Event) error {
 		return nil
 	}
 
-	return updateExportState(ctx, ormClient, ormEvent, "COMPLETED", &fileID)
+	return updateExportState(ctx, ormClient, ormEvent, "COMPLETED", 1, &fileID)
 }
 
-func updateExportState(ctx context.Context, c *graphqlorm.ORMClient, ormEvent events.Event, state string, fileID *string) (err error) {
-	input := map[string]string{
-		"state": state,
+func updateExportState(ctx context.Context, c *graphqlorm.ORMClient, ormEvent events.Event, state string, progress float32, fileID *string) (err error) {
+	input := map[string]interface{}{
+		"state":    state,
+		"progress": progress,
 	}
 
 	if fileID != nil {
@@ -77,7 +81,8 @@ func updateExportState(ctx context.Context, c *graphqlorm.ORMClient, ormEvent ev
 	}
 	return updateExport(ctx, c, ormEvent, input)
 }
-func updateExport(ctx context.Context, c *graphqlorm.ORMClient, ormEvent events.Event, input map[string]string) (err error) {
+func updateExport(ctx context.Context, c *graphqlorm.ORMClient, ormEvent events.Event, input map[string]interface{}) (err error) {
+	fmt.Println("update entity input", input)
 	_, err = c.UpdateEntity(ctx, graphqlorm.UpdateEntityOptions{
 		Entity:   ormEvent.Entity,
 		EntityID: ormEvent.EntityID,

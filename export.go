@@ -80,11 +80,37 @@ type SurveyExportQuery struct {
 	Result SurveyExport
 }
 
-func handleExport(ctx context.Context, client *graphqlorm.ORMClient, meta ExportMeta) (fileID string, err error) {
+func handleMetaFetch(ctx context.Context, client *graphqlorm.ORMClient, meta ExportMeta) (res ExportMeta, err error) {
+
+	if meta.PublicSurveyId != nil {
+		ids, rowNames, _err := fetchAnswerIDsByPublicSurveID(ctx, client, *meta.PublicSurveyId)
+		if _err != nil {
+			err = _err
+			return
+		}
+		meta.AnswerIDs = ids
+		meta.RowNames = rowNames
+	}
+	res = meta
+	return
+}
+
+func handleExport(ctx context.Context, client *graphqlorm.ORMClient, meta ExportMeta, progressHandler func(progress float32)) (fileID string, err error) {
 	surveyItems := []SurveyExportItem{}
 
 	chunks := [][]string{}
 	chunkSize := 100
+
+	if meta.PublicSurveyId != nil {
+		meta, err = handleMetaFetch(ctx, client, meta)
+		if err != nil {
+			return
+		}
+	}
+
+	if meta.RowNames == nil {
+		meta.RowNames = meta.AnswerIDs
+	}
 
 	for i := 0; i < len(meta.AnswerIDs); i += chunkSize {
 		end := i + chunkSize
@@ -96,7 +122,8 @@ func handleExport(ctx context.Context, client *graphqlorm.ORMClient, meta Export
 		chunks = append(chunks, meta.AnswerIDs[i:end])
 	}
 
-	for _, chunk := range chunks {
+	index := 0
+	for i, chunk := range chunks {
 		var query SurveyExportQuery
 		err = client.SendQuery(ctx, QUERY_SURVEY_EXPORT, map[string]interface{}{
 			"answerIDs": chunk,
@@ -105,6 +132,9 @@ func handleExport(ctx context.Context, client *graphqlorm.ORMClient, meta Export
 			return
 		}
 		surveyItems = append(surveyItems, query.Result.Items...)
+		fmt.Println("progress", i, len(chunks), index)
+		index++
+		progressHandler(float32(i) / float32(len(chunks)))
 	}
 
 	csv, err := buildCSV(ctx, surveyItems, meta)
@@ -112,7 +142,7 @@ func handleExport(ctx context.Context, client *graphqlorm.ORMClient, meta Export
 		return
 	}
 
-	fmt.Println("final csv", string(csv))
+	fmt.Println("final csv", len(surveyItems), string(csv))
 
 	fileID, err = uploadCSVFile(ctx, csv, "survey-export.csv")
 
